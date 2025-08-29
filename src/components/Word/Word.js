@@ -108,7 +108,7 @@ function Word() {
               />
             ))
           ) : (
-            <p>모든 단어 학습을 완료했습니다! 🎉</p>
+            <p className="text-center fs-4 text-muted py-5">모든 단어 학습을 완료했습니다! 🎉</p>
           )}
         </div>
       )}
