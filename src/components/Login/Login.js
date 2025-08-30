@@ -1,3 +1,4 @@
+// src/components/Login/Login.js
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
@@ -13,8 +14,7 @@ function Login() {
   const navigate = useNavigate();
 
   // 모드 전환 핸들러 (상태 초기화 포함)
-  const handleSwitchToSignUp = (e) => {
-    e.preventDefault();
+  const handleSwitchToSignUp = () => {
     setIsSignUp(true);
     setPassword("");
     setInvitationCode("");
@@ -22,8 +22,7 @@ function Login() {
     // email/userName은 유지해도 UX상 편리
   };
 
-  const handleSwitchToLogin = (e) => {
-    e.preventDefault();
+  const handleSwitchToLogin = () => {
     setIsSignUp(false);
     setPassword("");
     setInvitationCode("");
@@ -232,16 +231,26 @@ function Login() {
                   </div>
                 </form>
 
-                {/* 모드 전환 링크 */}
+                {/* 모드 전환 버튼 (a -> button: 접근성 OK) */}
                 <div className="text-center mt-3">
                   {isSignUp ? (
-                    <a href="#" onClick={handleSwitchToLogin}>
+                    <button
+                      type="button"
+                      className="btn btn-link p-0"
+                      onClick={handleSwitchToLogin}
+                      aria-label="로그인 화면으로 전환"
+                    >
                       이미 계정이 있으신가요? 로그인
-                    </a>
+                    </button>
                   ) : (
-                    <a href="#" onClick={handleSwitchToSignUp}>
+                    <button
+                      type="button"
+                      className="btn btn-link p-0"
+                      onClick={handleSwitchToSignUp}
+                      aria-label="회원가입 화면으로 전환"
+                    >
                       계정이 없으신가요? 회원가입
-                    </a>
+                    </button>
                   )}
                 </div>
               </div>
