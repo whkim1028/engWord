@@ -1,9 +1,43 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 
 function Navbar() {
   const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: userProfile, error } = await supabase
+          .from('User')
+          .select('adminYn')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching user profile:', error.message);
+        } else if (userProfile) {
+          setIsAdmin(userProfile.adminYn);
+        }
+      }
+    };
+
+    checkAdminStatus();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        checkAdminStatus();
+      } else {
+        setIsAdmin(false);
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -33,11 +67,13 @@ function Navbar() {
                 <i className="bi bi-pencil-square me-2"></i>시험
               </NavLink>
             </li>
-            <li className="nav-item">
-              <NavLink className="nav-link" to="/test">
-                <i className="bi bi-journal-text me-2"></i>시험등록
-              </NavLink>
-            </li>
+            {isAdmin && (
+              <li className="nav-item">
+                <NavLink className="nav-link" to="/test">
+                  <i className="bi bi-journal-text me-2"></i>시험등록
+                </NavLink>
+              </li>
+            )}
           </ul>
           <button className="btn btn-outline-light" onClick={handleLogout}>
             <i className="bi bi-box-arrow-right me-2"></i>로그아웃
