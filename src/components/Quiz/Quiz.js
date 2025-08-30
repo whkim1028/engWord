@@ -189,20 +189,26 @@ function Quiz() {
 
   return (
     <div className="container mt-4">
-      {/* 헤더 */}
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h2 className="mb-0">시험 페이지</h2>
-        {submitted && score && (
-          <span className="badge bg-primary fs-6">
-            점수: {score.correct} / {score.total}
-          </span>
-        )}
+      <div className="p-4 p-md-5 mb-4 bg-primary text-white rounded-3">
+        <div className="container-fluid py-3">
+          <div className="d-flex justify-content-between align-items-center">
+            <h1 className="display-5 fw-bold m-0">시험 페이지</h1>
+            {submitted && score && (
+              <span className="badge bg-light text-primary fs-6">
+                점수: {score.correct} / {score.total}
+              </span>
+            )}
+          </div>
+          <p className="fs-5 fs-md-4">
+            문제를 풀고 실력을 확인해 보세요.
+          </p>
+        </div>
       </div>
 
       {/* 버전 선택 */}
       <div className="card mb-3">
-        <div className="card-body">
-          <label className="form-label">버전 선택</label>
+        <div className="card-body p-4">
+          <label className="form-label fw-semibold">버전 선택</label>
           <div className="d-flex gap-2">
             <select
               className="form-select"
@@ -243,10 +249,10 @@ function Quiz() {
           {/* 진행률 */}
           <div className="mb-3">
             <div className="d-flex justify-content-between">
-              <small className="text-muted">
+              <small className="text-muted fw-semibold">
                 {currentIndex + 1} / {questions.length}
               </small>
-              <small className="text-muted">{progress}%</small>
+              <small className="text-muted fw-semibold">{progress}%</small>
             </div>
             <div
               className="progress"
@@ -261,7 +267,7 @@ function Quiz() {
 
           {/* 문제 카드 */}
           <div className="card mb-5">
-            <div className="card-header">
+            <div className="card-header fw-semibold">
               <strong>문제 {currentIndex + 1}</strong>
             </div>
             <div className="card-body">
@@ -275,7 +281,7 @@ function Quiz() {
                 {currentQuestion.shuffledAnswers.map((a) => (
                   <label
                     key={a.id}
-                    className={getChoiceClass(currentQuestion, a)}
+                    className={getChoiceClass(currentQuestion, a) + " py-3"}
                     style={{ cursor: submitted ? "default" : "pointer" }}
                   >
                     <input
@@ -311,7 +317,7 @@ function Quiz() {
 
           {/* 하단 내비게이션(모바일 sticky) */}
           <div
-            className="bg-white border-top py-2 px-2 d-flex gap-2"
+            className="bg-light shadow-sm border-top py-2 px-2 d-flex gap-2"
             style={{ position: "sticky", bottom: 0, zIndex: 10 }}
           >
             <button
@@ -359,7 +365,7 @@ function Quiz() {
           {submitted && score && (
             <div className="card mt-3 mb-5">
               <div className="card-body">
-                <h5 className="card-title">결과</h5>
+                <h5 className="card-title fw-semibold">결과</h5>
                 <p className="card-text mb-3">
                   총 <strong>{questions.length}</strong>문항 중{" "}
                   <strong className="text-primary">{score.correct}</strong>개
@@ -369,7 +375,7 @@ function Quiz() {
                 <div className="row g-3">
                   {/* 좌: 문제 리스트 */}
                   <div className="col-12 col-md-6">
-                    <div className="mb-2 fw-semibold">문제 리스트</div>
+                    <div className="mb-2 fw-bold">문제 리스트</div>
                     <div className="list-group">
                       {questions.map((q, idx) => {
                         const correct = isQuestionCorrect(q);
@@ -378,7 +384,7 @@ function Quiz() {
                           <button
                             key={q.id}
                             className={
-                              "list-group-item d-flex justify-content-between align-items-center " +
+                              "list-group-item d-flex justify-content-between align-items-center py-2 " +
                               (active ? "border border-primary" : "")
                             }
                             onClick={() => setResultFocusQid(q.id)}
@@ -403,7 +409,7 @@ function Quiz() {
 
                   {/* 우: 문제 해설 + 보기 해설 */}
                   <div className="col-12 col-md-6">
-                    <div className="mb-2 fw-semibold">문제 해설</div>
+                    <div className="mb-2 fw-bold">문제 해설</div>
                     <div className="border rounded p-3 mb-3 bg-light">
                       {resultFocusQuestion ? (
                         <>
@@ -440,7 +446,7 @@ function Quiz() {
                               return (
                                 <li key={a.id} className="mb-2">
                                   <div className="d-flex align-items-center">
-                                    <span className="badge me-2">
+                                    <span className="badge badge-pill me-2">
                                       {a.correctYn ? "정답" : "보기"}
                                     </span>
                                     <span className="fw-semibold">

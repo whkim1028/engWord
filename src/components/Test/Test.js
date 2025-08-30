@@ -312,9 +312,15 @@ function Test() {
 
   return (
     <div className="container-fluid mt-4">
-      {/* Page Header */}
-      <div className="mb-3">
-        <h2 className="mb-0">시험 등록</h2>
+      <div className="p-4 p-md-5 mb-4 bg-primary text-white rounded-3">
+        <div className="container-fluid py-3">
+          <div className="d-flex justify-content-between align-items-center">
+            <h1 className="display-5 fw-bold m-0">시험 등록</h1>
+          </div>
+          <p className="fs-5 fs-md-4">
+            새로운 시험 문제를 등록하고 관리하세요.
+          </p>
+        </div>
       </div>
 
       {/* Version Bar */}
@@ -391,7 +397,7 @@ function Test() {
                   className="table-responsive"
                   style={{ maxHeight: "55vh", overflowY: "auto" }}
                 >
-                  <table className="table table-hover mb-0">
+                  <table className="table table-hover table-striped mb-0">
                     <thead>
                       <tr>
                         <th scope="col" style={{ width: "45%" }}>
