@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
-import { supabase } from '../../supabaseClient';
-import Navbar from './Navbar';
+import { useState, useEffect } from "react";
+import { Navigate, Outlet } from "react-router-dom";
+import { supabase } from "../../supabaseClient";
+import Navbar from "./Navbar";
 
 const ProtectedRoute = () => {
   const [session, setSession] = useState(null);
@@ -9,14 +9,18 @@ const ProtectedRoute = () => {
 
   useEffect(() => {
     const fetchSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       setSession(session);
       setLoading(false);
     };
 
     fetchSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
 
@@ -33,7 +37,6 @@ const ProtectedRoute = () => {
 
   return (
     <>
-      <Navbar />
       <Outlet />
     </>
   );
