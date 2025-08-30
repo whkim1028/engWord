@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
-import Navbar from "./Navbar";
 
 const ProtectedRoute = () => {
   const [session, setSession] = useState(null);
