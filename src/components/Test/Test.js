@@ -1,3 +1,4 @@
+// src/components/Test/Test.js
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
 import * as XLSX from "xlsx";
@@ -29,7 +30,7 @@ function Test() {
       const { data, error } = await supabase.from("Question").select("version");
       if (error) throw error;
       const uniqueVersions = [
-        ...new Set(data.map((item) => item.version)),
+        ...new Set((data || []).map((item) => item.version)),
       ].sort();
       setExistingVersions(uniqueVersions);
     } catch (error) {
@@ -51,9 +52,11 @@ function Test() {
         .select("id, question, etc")
         .eq("version", selectedVersion);
       if (error) throw error;
-      setQuestions(data);
+      setQuestions(data || []);
       notifySuccess(
-        `'${selectedVersion}' 버전의 문제 ${data.length}개를 불러왔습니다.`
+        `'${selectedVersion}' 버전의 문제 ${
+          (data || []).length
+        }개를 불러왔습니다.`
       );
     } catch (error) {
       notifyError("문제 목록을 불러오는 데 실패했습니다.");
@@ -61,6 +64,13 @@ function Test() {
   };
 
   const handleQuestionSelect = async (question) => {
+    // temp-id면 선택 불가
+    if (!question.id || String(question.id).startsWith("temp-")) {
+      notifyError("문제를 먼저 저장해야 보기를 등록할 수 있습니다.");
+      setSelectedQuestion(null);
+      setAnswers([]);
+      return;
+    }
     setSelectedQuestion(question);
     try {
       const { data, error } = await supabase
@@ -68,24 +78,26 @@ function Test() {
         .select("*")
         .eq("questionId", question.id);
       if (error) throw error;
-      setAnswers(data);
+      setAnswers(data || []);
     } catch (error) {
       notifyError("보기 목록을 불러오는 데 실패했습니다.");
     }
   };
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files && e.target.files[0];
     if (file) handleExcelUpload(file, "question");
   };
 
   const handleAnswerFileChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files && e.target.files[0];
     if (file) handleExcelUpload(file, "answer");
   };
 
-  const handleUploadClick = () => fileInputRef.current.click();
-  const handleAnswerUploadClick = () => answerFileInputRef.current.click();
+  const handleUploadClick = () =>
+    fileInputRef.current && fileInputRef.current.click();
+  const handleAnswerUploadClick = () =>
+    answerFileInputRef.current && answerFileInputRef.current.click();
 
   const handleExcelUpload = useCallback(
     async (file, type) => {
@@ -100,7 +112,7 @@ function Test() {
           const worksheet = workbook.Sheets[sheetName];
           const json = XLSX.utils.sheet_to_json(worksheet);
 
-          if (json.length === 0) {
+          if (!json || json.length === 0) {
             notifyError("엑셀 파일에 데이터가 없습니다.");
             return;
           }
@@ -108,7 +120,9 @@ function Test() {
           if (type === "question") {
             const requiredFields = ["question", "etc"];
             if (
-              !requiredFields.every((field) => json[0].hasOwnProperty(field))
+              !requiredFields.every((f) =>
+                Object.prototype.hasOwnProperty.call(json[0], f)
+              )
             ) {
               notifyError(
                 `엑셀 파일에 필수 필드(${requiredFields.join(
@@ -117,16 +131,22 @@ function Test() {
               );
               return;
             }
-            setQuestions((prev) => [...prev, ...json]);
+            const questionsToAdd = json.map((q) => ({
+              ...q,
+              id: `temp-${Date.now()}-${Math.random()}`,
+            }));
+            setQuestions((prev) => [...prev, ...questionsToAdd]);
             notifySuccess(`${json.length}개의 문제를 목록에 추가했습니다.`);
           } else if (type === "answer") {
             if (!selectedQuestion) {
               notifyError("보기를 추가할 문제를 먼저 선택해주세요.");
               return;
             }
-            const requiredFields = ["answer", "correctYn", "etc"];
+            const requiredFields = ["answer_text", "is_correct"];
             if (
-              !requiredFields.every((field) => json[0].hasOwnProperty(field))
+              !requiredFields.every((f) =>
+                Object.prototype.hasOwnProperty.call(json[0], f)
+              )
             ) {
               notifyError(
                 `엑셀 파일에 필수 필드(${requiredFields.join(
@@ -136,7 +156,9 @@ function Test() {
               return;
             }
             const answersToInsert = json.map((item) => ({
-              ...item,
+              answer: item.answer_text,
+              correctYn: item.is_correct,
+              etc: item.explanation || "",
               questionId: selectedQuestion.id,
             }));
             const { data: insertedData, error } = await supabase
@@ -144,8 +166,10 @@ function Test() {
               .insert(answersToInsert)
               .select();
             if (error) throw error;
-            setAnswers((prev) => [...prev, ...insertedData]);
-            notifySuccess(`${insertedData.length}개의 보기를 추가했습니다.`);
+            setAnswers((prev) => [...prev, ...(insertedData || [])]);
+            notifySuccess(
+              `${(insertedData || []).length}개의 보기를 추가했습니다.`
+            );
           }
         } catch (error) {
           notifyError(`파일 처리 중 오류: ${error.message}`);
@@ -170,21 +194,31 @@ function Test() {
       return;
     }
     try {
-      await supabase.from("Question").delete().eq("version", version);
+      // 버전 전체 삭제 후 재삽입
+      const { error: deleteError } = await supabase
+        .from("Question")
+        .delete()
+        .eq("version", version);
+      if (deleteError) throw deleteError;
+
       const dataToInsert = questions.map(({ question, etc }) => ({
         question,
         etc,
         version,
       }));
-      const { error } = await supabase.from("Question").insert(dataToInsert);
-      if (error) throw error;
+
+      const { error: insertError } = await supabase
+        .from("Question")
+        .insert(dataToInsert);
+      if (insertError) throw insertError;
+
       notifySuccess(
         `'${version}' 버전의 시험 문제가 성공적으로 저장되었습니다.`
       );
       if (!existingVersions.includes(version)) {
         setExistingVersions((prev) => [...prev, version].sort());
       }
-      handleVersionSelect(version); // Re-fetch questions with IDs
+      handleVersionSelect(version); // 실제 ID로 재조회
     } catch (error) {
       notifyError(`저장 중 오류: ${error.message}`);
     }
@@ -195,7 +229,7 @@ function Test() {
       notifyError("문제를 먼저 선택해주세요.");
       return;
     }
-    if (!newAnswer.answer) {
+    if (!newAnswer.answer.trim()) {
       notifyError("답변 내용을 입력해주세요.");
       return;
     }
@@ -205,7 +239,7 @@ function Test() {
         .insert([{ ...newAnswer, questionId: selectedQuestion.id }])
         .select();
       if (error) throw error;
-      setAnswers([...answers, ...data]);
+      setAnswers((prev) => [...prev, ...(data || [])]);
       setNewAnswer({ answer: "", correctYn: false, etc: "" });
       notifySuccess("보기가 추가되었습니다.");
     } catch (error) {
@@ -220,7 +254,7 @@ function Test() {
         .delete()
         .eq("id", answerId);
       if (error) throw error;
-      setAnswers(answers.filter((a) => a.id !== answerId));
+      setAnswers((prev) => prev.filter((a) => a.id !== answerId));
       notifySuccess("보기가 삭제되었습니다.");
     } catch (error) {
       notifyError(`보기 삭제 중 오류: ${error.message}`);
@@ -232,20 +266,48 @@ function Test() {
       notifyError("문제 내용을 입력해주세요.");
       return;
     }
-    // Using a temporary unique ID for client-side operations
-    const questionToAdd = { ...newQuestion, id: `temp-${Date.now()}` };
-    setQuestions([...questions, questionToAdd]);
-    setNewQuestion({ question: "", etc: "" }); // Reset input
+    const questionToAdd = {
+      ...newQuestion,
+      id: `temp-${Date.now()}-${Math.random()}`,
+    };
+    setQuestions((prev) => [...prev, questionToAdd]);
+    setNewQuestion({ question: "", etc: "" });
   };
 
-  const handleDeleteQuestion = (index) => {
+  const handleDeleteQuestion = async (index) => {
     const questionToDelete = questions[index];
-    if (selectedQuestion && selectedQuestion.id === questionToDelete.id) {
+
+    if (
+      questionToDelete &&
+      questionToDelete.id &&
+      !String(questionToDelete.id).startsWith("temp-")
+    ) {
+      try {
+        const { error } = await supabase
+          .from("Question")
+          .delete()
+          .eq("id", questionToDelete.id);
+        if (error) throw error;
+        notifySuccess("문제가 데이터베이스에서 삭제되었습니다.");
+      } catch (error) {
+        notifyError(`문제 삭제 중 오류: ${error.message}`);
+        return;
+      }
+    }
+
+    if (
+      selectedQuestion &&
+      questionToDelete &&
+      selectedQuestion.id === questionToDelete.id
+    ) {
       setSelectedQuestion(null);
       setAnswers([]);
     }
-    setQuestions(questions.filter((_, i) => i !== index));
-    notifySuccess("문제가 목록에서 삭제되었습니다.");
+
+    setQuestions((prev) => prev.filter((_, i) => i !== index));
+    if (questionToDelete && String(questionToDelete.id).startsWith("temp-")) {
+      notifySuccess("문제가 목록에서 삭제되었습니다.");
+    }
   };
 
   return (
@@ -299,34 +361,35 @@ function Test() {
             accept=".xlsx, .xls"
           />
 
-          {questions.length > 0 ? (
-            <div
-              className="card"
-              style={{ maxHeight: "70vh", overflowY: "auto" }}
-            >
-              <div className="card-header d-flex justify-content-between align-items-center">
-                <h5 className="mb-0">문제 목록 ({questions.length}개)</h5>
-                <div>
-                  <button
-                    className="btn btn-secondary btn-sm me-2"
-                    onClick={handleUploadClick}
-                    disabled={uploading}
-                  >
-                    {uploading ? "업로드 중..." : "엑셀 추가"}
-                  </button>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={handleSave}
-                    disabled={!version || questions.length === 0 || uploading}
-                  >
-                    저장
-                  </button>
-                </div>
+          <div className="card">
+            {/* Header: 항상 노출 */}
+            <div className="card-header d-flex justify-content-between align-items-center">
+              <h5 className="mb-0">문제 목록 ({questions.length}개)</h5>
+              <div>
+                <button
+                  className="btn btn-secondary btn-sm me-2"
+                  onClick={handleUploadClick}
+                  disabled={uploading}
+                >
+                  {uploading ? "업로드 중..." : "엑셀 추가"}
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleSave}
+                  disabled={!version || uploading}
+                  title={!version ? "버전을 입력하거나 선택하세요" : ""}
+                >
+                  저장
+                </button>
               </div>
+            </div>
+
+            {/* Body */}
+            {questions.length > 0 ? (
               <div className="card-body p-0">
                 <div
                   className="table-responsive"
-                  style={{ maxHeight: "60vh", overflowY: "auto" }}
+                  style={{ maxHeight: "55vh", overflowY: "auto" }}
                 >
                   <table className="table table-hover mb-0">
                     <thead>
@@ -346,7 +409,9 @@ function Test() {
                           key={q.id || `q-${index}`}
                           onClick={() => handleQuestionSelect(q)}
                           className={
-                            selectedQuestion?.id === q.id ? "table-active" : ""
+                            selectedQuestion && selectedQuestion.id === q.id
+                              ? "table-active"
+                              : ""
                           }
                           style={{ cursor: "pointer" }}
                         >
@@ -356,7 +421,7 @@ function Test() {
                             <button
                               className="btn btn-sm btn-outline-danger py-0 px-1"
                               onClick={(e) => {
-                                e.stopPropagation(); // Prevent row selection
+                                e.stopPropagation();
                                 handleDeleteQuestion(index);
                               }}
                             >
@@ -369,53 +434,57 @@ function Test() {
                   </table>
                 </div>
               </div>
-              <div className="card-footer">
-                <div className="row g-2 align-items-center">
-                  <div className="col">
-                    <input
-                      type="text"
-                      className="form-control form-control-sm"
-                      placeholder="새 문제 입력"
-                      value={newQuestion.question}
-                      onChange={(e) =>
-                        setNewQuestion({
-                          ...newQuestion,
-                          question: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="col">
-                    <input
-                      type="text"
-                      className="form-control form-control-sm"
-                      placeholder="부연 설명 (선택)"
-                      value={newQuestion.etc}
-                      onChange={(e) =>
-                        setNewQuestion({ ...newQuestion, etc: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="col-auto">
-                    <button
-                      className="btn btn-sm btn-success"
-                      onClick={handleAddQuestion}
-                    >
-                      행 추가
-                    </button>
-                  </div>
+            ) : (
+              <div className="card-body">
+                <div className="text-center p-5 border rounded bg-light">
+                  <h4>등록할 시험 문제가 없습니다.</h4>
+                  <p className="text-muted mb-0">
+                    상단의 <strong>엑셀 추가</strong>로 일괄 등록하거나 아래
+                    입력폼으로 새 문제를 추가하세요.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Footer: 항상 노출 → 문제 0개여도 신규 등록 가능 */}
+            <div className="card-footer">
+              <div className="row g-2 align-items-center">
+                <div className="col">
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="새 문제 입력"
+                    value={newQuestion.question}
+                    onChange={(e) =>
+                      setNewQuestion({
+                        ...newQuestion,
+                        question: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="col">
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="부연 설명 (선택)"
+                    value={newQuestion.etc}
+                    onChange={(e) =>
+                      setNewQuestion({ ...newQuestion, etc: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="col-auto">
+                  <button
+                    className="btn btn-sm btn-success"
+                    onClick={handleAddQuestion}
+                  >
+                    행 추가
+                  </button>
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="text-center p-5 border rounded bg-light">
-              <h4>등록할 시험 문제가 없습니다.</h4>
-              <p className="text-muted">
-                버전을 선택하여 기존 문제를 불러오거나, "엑셀 추가" 버튼을
-                클릭하여 새 문제를 등록해주세요.
-              </p>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Right Column: Answers */}
@@ -427,6 +496,9 @@ function Test() {
                 className="btn btn-sm btn-outline-primary"
                 onClick={handleAnswerUploadClick}
                 disabled={!selectedQuestion || uploading}
+                title={
+                  !selectedQuestion ? "왼쪽에서 문제를 먼저 선택하세요" : ""
+                }
               >
                 {uploading ? "업로드 중..." : "보기 엑셀 업로드"}
               </button>
@@ -452,10 +524,12 @@ function Test() {
                 <>
                   <div className="mb-3">
                     <strong>선택된 문제:</strong>
-                    <p className="text-primary">{selectedQuestion.question}</p>
+                    <p className="text-primary mb-0">
+                      {selectedQuestion.question}
+                    </p>
                   </div>
 
-                  <h6>
+                  <h6 className="mt-3">
                     보기 목록{" "}
                     <span className="text-muted">({answers.length}개)</span>
                   </h6>
@@ -497,6 +571,7 @@ function Test() {
                       </tbody>
                     </table>
                   </div>
+
                   <hr />
                   <h6>새 보기 추가</h6>
                   <div className="mb-2">
@@ -557,4 +632,5 @@ function Test() {
     </div>
   );
 }
+
 export default Test;
