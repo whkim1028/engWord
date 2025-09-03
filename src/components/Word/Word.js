@@ -254,6 +254,24 @@ function Word() {
 
       {/* 필터 섹션 */}
       <div className="card card-body bg-light mb-4">
+        <div className="col-md-6">
+          <label htmlFor="category-filter" className="form-label">
+            단어장
+          </label>
+          <select
+            id="category-filter"
+            className="form-select"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          >
+            <option value="">전체</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="row g-3">
           <div className="col-md-6">
             <label htmlFor="div-filter" className="form-label">
@@ -269,24 +287,6 @@ function Word() {
               {divs.map((div) => (
                 <option key={div} value={div}>
                   {div}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="col-md-6">
-            <label htmlFor="category-filter" className="form-label">
-              단어장
-            </label>
-            <select
-              id="category-filter"
-              className="form-select"
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-            >
-              <option value="">전체</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
                 </option>
               ))}
             </select>
