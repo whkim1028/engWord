@@ -257,7 +257,7 @@ function Word() {
         <div className="row g-3">
           <div className="col-md-6">
             <label htmlFor="div-filter" className="form-label">
-              차수
+              Day
             </label>
             <select
               id="div-filter"
@@ -275,7 +275,7 @@ function Word() {
           </div>
           <div className="col-md-6">
             <label htmlFor="category-filter" className="form-label">
-              카테고리
+              단어장
             </label>
             <select
               id="category-filter"
