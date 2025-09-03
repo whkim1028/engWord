@@ -31,15 +31,54 @@ function Word() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
+  // Div 필터링 관련 상태
+  const [divs, setDivs] = useState([]);
+  const [selectedDiv, setSelectedDiv] = useState(""); // ""는 '전체'를 의미
+
+  // Category 필터링 관련 상태
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(""); // ""는 '전체'를 의미
+
   // 완료 단어(로컬스토리지)
   const getCompletedIds = () =>
     JSON.parse(localStorage.getItem(COMPLETED_WORDS_STORAGE_KEY)) || [];
 
+  const fetchDivs = async () => {
+    try {
+      const { data, error } = await supabase.from("Word").select("div");
+      if (error) throw error;
+      const distinctDivs = [
+        ...new Set(data.map((item) => item.div).filter(Boolean)),
+      ];
+      setDivs(distinctDivs.sort());
+    } catch (e) {
+      notifyError(`Div 목록 로딩 실패: ${e.message}`);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase.from("Word").select("category");
+      if (error) throw error;
+      const distinctCategories = [
+        ...new Set(data.map((item) => item.category).filter(Boolean)),
+      ];
+      setCategories(distinctCategories.sort());
+    } catch (e) {
+      notifyError(`Category 목록 로딩 실패: ${e.message}`);
+    }
+  };
+
   useEffect(() => {
-    // 최초 1페이지 로드
+    fetchDivs(); // 컴포넌트 마운트 시 Div 목록 한번만 가져옴
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    // selectedDiv가 변경될 때마다 단어 목록을 새로고침
     resetAndLoad();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedDiv, selectedCategory]);
 
   const resetAndLoad = async () => {
     setLoading(true);
@@ -75,6 +114,8 @@ function Word() {
       _limit: PAGE_SIZE + 1, // +1개 더 받아 다음 페이지 유무 확인
       _offset: from,
       _completed_ids: completed,
+      _div: selectedDiv || null,
+      _category: selectedCategory || null,
     });
     if (error) throw error;
 
@@ -126,7 +167,7 @@ function Word() {
         const worksheet = workbook.Sheets[sheetName];
 
         const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-          header: ["engWord", "korWord", "etc"],
+          header: ["engWord", "korWord", "etc", "div", "category"],
           skipHeader: true,
         });
 
@@ -208,6 +249,39 @@ function Word() {
           <p className="fs-5 fs-md-4">
             매일 새로운 단어를 학습하며, 카드를 클릭하여 뜻을 확인해 보세요.
           </p>
+        </div>
+      </div>
+
+      <div className="row mb-4">
+        <div className="col-md-4">
+          <select
+            className="form-select"
+            value={selectedDiv}
+            onChange={(e) => setSelectedDiv(e.target.value)}
+            aria-label="Div filter"
+          >
+            <option value="">전체</option>
+            {divs.map((div) => (
+              <option key={div} value={div}>
+                {div}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="col-md-4">
+          <select
+            className="form-select"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            aria-label="Category filter"
+          >
+            <option value="">전체</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
