@@ -8,11 +8,21 @@ import { notifySuccess, notifyError } from "../../utils/notification";
 
 const COMPLETED_WORDS_STORAGE_KEY = "completedWords";
 const PAGE_SIZE = 20;
+const SEED_STORAGE_KEY = "randomSeed";
 
 function Word() {
   const location = useLocation();
   const isAdmin = location.state?.isAdmin || false;
   const fileInputRef = useRef(null);
+
+  // 세션 동안 고정되는 시드(새로고침 시 유지, 탭 닫으면 초기화)
+  const [seed] = useState(() => {
+    const saved = sessionStorage.getItem(SEED_STORAGE_KEY);
+    if (saved) return saved;
+    const s = Math.random().toString(36).slice(2);
+    sessionStorage.setItem(SEED_STORAGE_KEY, s);
+    return s;
+  });
 
   // 렌더링 목록(누적), 로딩 상태, 페이지, 더 불러올 수 있는지
   const [words, setWords] = useState([]);
@@ -49,30 +59,30 @@ function Word() {
   };
 
   /**
-   * 특정 페이지 데이터를 서버에서 20개 가져와서,
-   * useYn=true + 완료단어 제외 필터링을 적용해 반환
+   * 서버(RPC)에서 랜덤 정렬된 페이지 데이터를 가져옴
+   * - useYn=true
+   * - 완료단어 제외(서버에서 필터링)
+   * - limit+1 트릭으로 hasMore 판정
    * @param {number} pageIndex 0-based
    * @returns {{items: Array, hasMore: boolean}}
    */
   const fetchPage = async (pageIndex) => {
     const from = pageIndex * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
 
-    // 서버에서 페이지 단위로 가져오기
-    const { data, error } = await supabase
-      .from("Word")
-      .select("*")
-      .eq("useYn", true)
-      .order("id", { ascending: true })
-      .range(from, to);
+    const completed = getCompletedIds(); // number[] (localStorage)
+    const { data, error } = await supabase.rpc("get_words_random", {
+      _seed: seed,
+      _limit: PAGE_SIZE + 1, // +1개 더 받아 다음 페이지 유무 확인
+      _offset: from,
+      _completed_ids: completed,
+    });
     if (error) throw error;
 
-    const completed = new Set(getCompletedIds());
-    const filtered = (data || []).filter((w) => !completed.has(w.id));
+    const rows = data || [];
+    const hasMore = rows.length > PAGE_SIZE;
+    const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
 
-    // 다음 페이지가 더 있는지 대략 판단(이번에 PAGE_SIZE개를 받았는지 기준)
-    const hasMore = (data || []).length === PAGE_SIZE;
-    return { items: filtered, hasMore };
+    return { items, hasMore };
   };
 
   const loadMore = async () => {
@@ -97,7 +107,7 @@ function Word() {
       COMPLETED_WORDS_STORAGE_KEY,
       JSON.stringify(newCompletedWords)
     );
-    // 현재 화면에서도 제거
+    // 현재 화면에서도 제거(다음 페이지부터는 서버가 제외)
     setWords((currentWords) =>
       currentWords.filter((word) => word.id !== wordId)
     );
@@ -124,7 +134,6 @@ function Word() {
           throw new Error("엑셀 파일에 데이터가 없습니다.");
 
         // (간단/안전) 전체 engWord 가져와서 중복 제거
-        // 데이터가 수천 개 규모라면 이 방식으로도 충분히 동작합니다.
         const { data: existingWords, error: fetchError } = await supabase
           .from("Word")
           .select("engWord");
@@ -207,7 +216,6 @@ function Word() {
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Loading...</span>
           </div>
-          <p className="mt-2 text-muted">단어를 불러오는 중...</p>
         </div>
       ) : (
         <>
