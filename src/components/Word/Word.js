@@ -252,36 +252,45 @@ function Word() {
         </div>
       </div>
 
-      <div className="row mb-4">
-        <div className="col-md-4">
-          <select
-            className="form-select"
-            value={selectedDiv}
-            onChange={(e) => setSelectedDiv(e.target.value)}
-            aria-label="Div filter"
-          >
-            <option value="">전체</option>
-            {divs.map((div) => (
-              <option key={div} value={div}>
-                {div}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-md-4">
-          <select
-            className="form-select"
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            aria-label="Category filter"
-          >
-            <option value="">전체</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
+      {/* 필터 섹션 */}
+      <div className="card card-body bg-light mb-4">
+        <div className="row g-3">
+          <div className="col-md-6">
+            <label htmlFor="div-filter" className="form-label">
+              차수
+            </label>
+            <select
+              id="div-filter"
+              className="form-select"
+              value={selectedDiv}
+              onChange={(e) => setSelectedDiv(e.target.value)}
+            >
+              <option value="">전체</option>
+              {divs.map((div) => (
+                <option key={div} value={div}>
+                  {div}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="col-md-6">
+            <label htmlFor="category-filter" className="form-label">
+              카테고리
+            </label>
+            <select
+              id="category-filter"
+              className="form-select"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <option value="">전체</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
