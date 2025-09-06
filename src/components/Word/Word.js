@@ -31,13 +31,11 @@ function Word() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  // Div 필터링 관련 상태
+  // Div / Category 필터
   const [divs, setDivs] = useState([]);
-  const [selectedDiv, setSelectedDiv] = useState(""); // ""는 '전체'를 의미
-
-  // Category 필터링 관련 상태
+  const [selectedDiv, setSelectedDiv] = useState("");
   const [categories, setCategories] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState(""); // ""는 '전체'를 의미
+  const [selectedCategory, setSelectedCategory] = useState("");
 
   // 완료 단어(로컬스토리지)
   const getCompletedIds = () =>
@@ -70,12 +68,11 @@ function Word() {
   };
 
   useEffect(() => {
-    fetchDivs(); // 컴포넌트 마운트 시 Div 목록 한번만 가져옴
+    fetchDivs();
     fetchCategories();
   }, []);
 
   useEffect(() => {
-    // selectedDiv가 변경될 때마다 단어 목록을 새로고침
     resetAndLoad();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDiv, selectedCategory]);
@@ -102,16 +99,14 @@ function Word() {
    * - useYn=true
    * - 완료단어 제외(서버에서 필터링)
    * - limit+1 트릭으로 hasMore 판정
-   * @param {number} pageIndex 0-based
-   * @returns {{items: Array, hasMore: boolean}}
    */
   const fetchPage = async (pageIndex) => {
     const from = pageIndex * PAGE_SIZE;
 
-    const completed = getCompletedIds(); // number[] (localStorage)
+    const completed = getCompletedIds();
     const { data, error } = await supabase.rpc("get_words_random", {
       _seed: seed,
-      _limit: PAGE_SIZE + 1, // +1개 더 받아 다음 페이지 유무 확인
+      _limit: PAGE_SIZE + 1,
       _offset: from,
       _completed_ids: completed,
       _div: selectedDiv || null,
@@ -148,74 +143,103 @@ function Word() {
       COMPLETED_WORDS_STORAGE_KEY,
       JSON.stringify(newCompletedWords)
     );
-    // 현재 화면에서도 제거(다음 페이지부터는 서버가 제외)
     setWords((currentWords) =>
       currentWords.filter((word) => word.id !== wordId)
     );
   };
 
+  // ✅ 수정된 업로드: 기존 데이터 전부 삭제 후, 엑셀의 데이터만 인서트
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
+    if (
+      !window.confirm(
+        "현재 Word 테이블의 모든 데이터를 삭제하고, 업로드 파일의 데이터로 재생성합니다. 계속할까요?"
+      )
+    ) {
+      event.target.value = null;
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
+        // 1) 엑셀 파싱
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: "array" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
 
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        // 파일 헤더 순서: engWord, korWord, etc, div, category
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, {
           header: ["engWord", "korWord", "etc", "div", "category"],
           skipHeader: true,
         });
 
-        if (jsonData.length === 0)
-          throw new Error("엑셀 파일에 데이터가 없습니다.");
+        if (!rawRows.length) throw new Error("엑셀 파일에 데이터가 없습니다.");
 
-        // (간단/안전) 전체 engWord 가져와서 중복 제거
-        const { data: existingWords, error: fetchError } = await supabase
+        // 2) 정규화 + 파일 내부 중복 제거(engWord 기준, 대소문자 무시)
+        const seen = new Set();
+        const prepared = rawRows
+          .map((r) => ({
+            engWord: (r.engWord ?? "").toString().trim(),
+            korWord: (r.korWord ?? "").toString().trim(),
+            etc: (r.etc ?? "").toString().trim(),
+            div: r.div ? r.div.toString().trim() : null,
+            category: r.category ? r.category.toString().trim() : null,
+            useYn: true, // 조회 조건과 일치하도록 명시
+          }))
+          .filter((r) => r.engWord.length > 0)
+          .filter((r) => {
+            const key = r.engWord.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+
+        if (!prepared.length)
+          throw new Error("유효한 단어(engWord)가 없습니다.");
+
+        // 3) 기존 데이터 전체 삭제
+        const { error: delError } = await supabase
           .from("Word")
-          .select("engWord");
-        if (fetchError) throw fetchError;
+          .delete()
+          .not("id", "is", null); // 모든 행 삭제
+        if (delError) throw delError;
 
-        const existingSet = new Set(
-          (existingWords || [])
-            .map((w) => w.engWord)
-            .filter(Boolean)
-            .map((s) => s.trim().toLowerCase())
-        );
-
-        // 업로드 대상 정규화 후 중복 스킵 (engWord 기준, 대소문자 무시)
-        const newWords = jsonData
-          .filter((w) => w.engWord)
-          .filter(
-            (w) => !existingSet.has(String(w.engWord).trim().toLowerCase())
-          );
-
-        if (newWords.length === 0) {
-          notifyError("업로드할 새로운 단어가 없습니다. (모두 중복됨)");
-          return;
+        // 4) 대량 인서트(청크)
+        const chunkSize = 1000;
+        const chunks = [];
+        for (let i = 0; i < prepared.length; i += chunkSize) {
+          chunks.push(prepared.slice(i, i + chunkSize));
+        }
+        for (const chunk of chunks) {
+          const { error: insertError } = await supabase
+            .from("Word")
+            .insert(chunk);
+          if (insertError) throw insertError;
         }
 
-        const { error: insertError } = await supabase
-          .from("Word")
-          .insert(newWords);
-        if (insertError) throw insertError;
+        // 5) 완료 단어 로컬 스토리지 초기화 (ID 재생성되므로)
+        localStorage.removeItem(COMPLETED_WORDS_STORAGE_KEY);
 
         notifySuccess(
-          `${newWords.length}개의 단어가 성공적으로 업로드되었습니다. (중복 제외)`
+          `총 ${prepared.length.toLocaleString()}개의 단어가 재생성되었습니다.`
         );
 
-        // 업로드 후 목록 초기화 & 재조회
+        // 6) 필터 리프레시 + 목록 재조회
+        await fetchDivs();
+        await fetchCategories();
         await resetAndLoad();
       } catch (error) {
         notifyError(`업로드 실패: ${error.message}`);
+      } finally {
+        event.target.value = null;
       }
     };
+
     reader.readAsArrayBuffer(file);
-    event.target.value = null;
   };
 
   const triggerFileInput = () => {
@@ -330,7 +354,6 @@ function Word() {
             )}
           </div>
 
-          {/* 더 보기 */}
           {hasMore && (
             <div className="text-center mb-5">
               <button
