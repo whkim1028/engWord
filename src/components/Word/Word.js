@@ -275,7 +275,7 @@ function Word() {
             <div className="d-flex align-items-center gap-2">
               {/* 완료 배지 */}
               <span className="badge bg-light text-dark">
-                숨긴 단어: <strong>{completedCount.toLocaleString()}</strong>
+                완료된 단어: <strong>{completedCount.toLocaleString()}</strong>
               </span>
 
               {/* 리셋 버튼 */}
