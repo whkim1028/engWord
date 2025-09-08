@@ -37,9 +37,19 @@ function Word() {
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("");
 
-  // 완료 단어(로컬스토리지)
-  const getCompletedIds = () =>
-    JSON.parse(localStorage.getItem(COMPLETED_WORDS_STORAGE_KEY)) || [];
+  // 완료 단어(로컬스토리지) — 안전 파싱 + 카운트 배지
+  const safeGetCompleted = () => {
+    try {
+      const raw = localStorage.getItem(COMPLETED_WORDS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  };
+  const getCompletedIds = () => safeGetCompleted();
+  const [completedCount, setCompletedCount] = useState(
+    safeGetCompleted().length
+  );
 
   const fetchDivs = async () => {
     try {
@@ -115,10 +125,10 @@ function Word() {
     if (error) throw error;
 
     const rows = data || [];
-    const hasMore = rows.length > PAGE_SIZE;
-    const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
+    const hasMoreNext = rows.length > PAGE_SIZE;
+    const items = hasMoreNext ? rows.slice(0, PAGE_SIZE) : rows;
 
-    return { items, hasMore };
+    return { items, hasMore: hasMoreNext };
   };
 
   const loadMore = async () => {
@@ -143,14 +153,24 @@ function Word() {
       COMPLETED_WORDS_STORAGE_KEY,
       JSON.stringify(newCompletedWords)
     );
+    setCompletedCount(newCompletedWords.length);
     setWords((currentWords) =>
       currentWords.filter((word) => word.id !== wordId)
     );
   };
 
+  // ✅ 완료 초기화(리셋) — 로컬스토리지 비우고 재조회
+  const resetCompleted = async () => {
+    localStorage.removeItem(COMPLETED_WORDS_STORAGE_KEY);
+    setCompletedCount(0);
+    await resetAndLoad();
+    notifySuccess("완료한 단어 표시가 초기화되었습니다.");
+  };
+
   // ✅ 수정된 업로드: 기존 데이터 전부 삭제 후, 엑셀의 데이터만 인서트
   const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
+    const inputEl = event.target; // 안전하게 참조 확보
+    const file = inputEl.files?.[0];
     if (!file) return;
 
     if (
@@ -158,15 +178,15 @@ function Word() {
         "현재 Word 테이블의 모든 데이터를 삭제하고, 업로드 파일의 데이터로 재생성합니다. 계속할까요?"
       )
     ) {
-      event.target.value = null;
+      inputEl.value = null;
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = async (e) => {
+    reader.onload = async (frEvt) => {
       try {
         // 1) 엑셀 파싱
-        const data = new Uint8Array(e.target.result);
+        const data = new Uint8Array(frEvt.target.result);
         const workbook = XLSX.read(data, { type: "array" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
@@ -210,11 +230,8 @@ function Word() {
 
         // 4) 대량 인서트(청크)
         const chunkSize = 1000;
-        const chunks = [];
         for (let i = 0; i < prepared.length; i += chunkSize) {
-          chunks.push(prepared.slice(i, i + chunkSize));
-        }
-        for (const chunk of chunks) {
+          const chunk = prepared.slice(i, i + chunkSize);
           const { error: insertError } = await supabase
             .from("Word")
             .insert(chunk);
@@ -223,6 +240,7 @@ function Word() {
 
         // 5) 완료 단어 로컬 스토리지 초기화 (ID 재생성되므로)
         localStorage.removeItem(COMPLETED_WORDS_STORAGE_KEY);
+        setCompletedCount(0);
 
         notifySuccess(
           `총 ${prepared.length.toLocaleString()}개의 단어가 재생성되었습니다.`
@@ -235,7 +253,7 @@ function Word() {
       } catch (error) {
         notifyError(`업로드 실패: ${error.message}`);
       } finally {
-        event.target.value = null;
+        inputEl.value = null; // 같은 파일 재업로드 허용
       }
     };
 
@@ -248,56 +266,80 @@ function Word() {
 
   return (
     <div className="container mt-4">
+      {/* Hero */}
       <div className="p-4 p-md-5 mb-4 bg-primary text-white rounded-3">
         <div className="container-fluid py-3">
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h1 className="display-5 fw-bold m-0">영단어장</h1>
-            {isAdmin && (
-              <>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  style={{ display: "none" }}
-                  accept=".xlsx, .xls"
-                />
-                <button
-                  className="btn btn-outline-light"
-                  onClick={triggerFileInput}
-                >
-                  단어 업로드
-                </button>
-              </>
-            )}
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3 gap-3">
+            <h1 className="display-6 fw-bold m-0">영단어장</h1>
+
+            <div className="d-flex align-items-center gap-2">
+              {/* 완료 배지 */}
+              <span className="badge bg-light text-dark">
+                숨긴 단어: <strong>{completedCount.toLocaleString()}</strong>
+              </span>
+
+              {/* 리셋 버튼 */}
+              <button
+                type="button"
+                className="btn btn-outline-light"
+                onClick={resetCompleted}
+                title="완료 처리한 단어들을 다시 보이게 합니다"
+              >
+                완료 초기화
+              </button>
+
+              {/* 관리자 전용 업로드 */}
+              {isAdmin && (
+                <>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    style={{ display: "none" }}
+                    accept=".xlsx, .xls"
+                  />
+                  <button
+                    className="btn btn-light"
+                    onClick={triggerFileInput}
+                    title="엑셀 업로드 후 전체 재생성"
+                  >
+                    단어 업로드
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <p className="fs-5 fs-md-4">
-            매일 새로운 단어를 학습하며, 카드를 클릭하여 뜻을 확인해 보세요.
+
+          <p className="fs-6 m-0 opacity-75">
+            매일 새로운 단어를 학습하고, 카드를 클릭해 뜻을 확인하세요. 완료한
+            단어는 자동으로 숨겨집니다.
           </p>
         </div>
       </div>
 
       {/* 필터 섹션 */}
       <div className="card card-body bg-light mb-4">
-        <div className="col-md-6">
-          <label htmlFor="category-filter" className="form-label">
-            단어장
-          </label>
-          <select
-            id="category-filter"
-            className="form-select"
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-          >
-            <option value="">전체</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="row g-3">
-          <div className="col-md-6">
+        <div className="row g-3 align-items-end">
+          <div className="col-12 col-md-6">
+            <label htmlFor="category-filter" className="form-label">
+              단어장
+            </label>
+            <select
+              id="category-filter"
+              className="form-select"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <option value="">전체</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="col-12 col-md-6">
             <label htmlFor="div-filter" className="form-label">
               Day
             </label>
@@ -318,6 +360,7 @@ function Word() {
         </div>
       </div>
 
+      {/* 목록 */}
       {loading ? (
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
