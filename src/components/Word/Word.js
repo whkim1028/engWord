@@ -97,9 +97,9 @@ function Word() {
     setHasMore(true);
     try {
       // 전체 랜덤 단어 목록을 서버에서 가져옴 (완료 단어 제외 안 함)
-      await fetchAllWords();
-      // 첫 페이지 로드
-      loadPage(0);
+      const allWords = await fetchAllWords();
+      // 첫 페이지 로드 - 반환받은 데이터를 직접 전달하여 타이밍 이슈 해결
+      loadPage(0, allWords);
     } catch (e) {
       notifyError(`단어 로딩 실패: ${e.message}`);
     } finally {
@@ -111,6 +111,7 @@ function Word() {
    * 서버에서 전체 랜덤 정렬된 단어를 가져와 캐시에 저장
    * - 완료 단어 제외는 클라이언트에서 수행
    * - 필터(div, category)는 서버에서 적용
+   * @returns {Promise<Array>} 가져온 단어 배열
    */
   const fetchAllWords = async () => {
     const { data, error } = await supabase.rpc("get_words_random", {
@@ -123,23 +124,29 @@ function Word() {
     });
     if (error) throw error;
 
-    setAllRandomWords(data || []);
+    const words = data || [];
+    setAllRandomWords(words);
+    return words; // 데이터 반환 추가
   };
 
   /**
    * 완료되지 않은 단어만 필터링
+   * @param {Array} wordsToFilter - 필터링할 단어 배열 (선택적, 기본값은 allRandomWords)
    */
-  const getFilteredWords = () => {
+  const getFilteredWords = (wordsToFilter = null) => {
     const completedIds = getCompletedIds();
     const completedSet = new Set(completedIds);
-    return allRandomWords.filter((word) => !completedSet.has(word.id));
+    const sourceWords = wordsToFilter !== null ? wordsToFilter : allRandomWords;
+    return sourceWords.filter((word) => !completedSet.has(word.id));
   };
 
   /**
    * 페이지 인덱스에 해당하는 단어들을 표시
+   * @param {number} pageIndex - 페이지 인덱스
+   * @param {Array} sourceWords - 소스 단어 배열 (선택적)
    */
-  const loadPage = (pageIndex) => {
-    const filteredWords = getFilteredWords();
+  const loadPage = (pageIndex, sourceWords = null) => {
+    const filteredWords = getFilteredWords(sourceWords);
     const from = pageIndex * PAGE_SIZE;
     const to = from + PAGE_SIZE;
     const pageWords = filteredWords.slice(from, to);
