@@ -31,6 +31,9 @@ function Word() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
+  // 전체 랜덤 단어 목록 캐시 (완료 단어 제외 전)
+  const [allRandomWords, setAllRandomWords] = useState([]);
+
   // Div / Category 필터
   const [divs, setDivs] = useState([]);
   const [selectedDiv, setSelectedDiv] = useState("");
@@ -93,10 +96,10 @@ function Word() {
     setPage(0);
     setHasMore(true);
     try {
-      const first = await fetchPage(0);
-      setWords(first.items);
-      setHasMore(first.hasMore);
-      setPage(1);
+      // 전체 랜덤 단어 목록을 서버에서 가져옴 (완료 단어 제외 안 함)
+      await fetchAllWords();
+      // 첫 페이지 로드
+      loadPage(0);
     } catch (e) {
       notifyError(`단어 로딩 실패: ${e.message}`);
     } finally {
@@ -105,40 +108,52 @@ function Word() {
   };
 
   /**
-   * 서버(RPC)에서 랜덤 정렬된 페이지 데이터를 가져옴
-   * - useYn=true
-   * - 완료단어 제외(서버에서 필터링)
-   * - limit+1 트릭으로 hasMore 판정
+   * 서버에서 전체 랜덤 정렬된 단어를 가져와 캐시에 저장
+   * - 완료 단어 제외는 클라이언트에서 수행
+   * - 필터(div, category)는 서버에서 적용
    */
-  const fetchPage = async (pageIndex) => {
-    const from = pageIndex * PAGE_SIZE;
-
-    const completed = getCompletedIds();
+  const fetchAllWords = async () => {
     const { data, error } = await supabase.rpc("get_words_random", {
       _seed: seed,
-      _limit: PAGE_SIZE + 1,
-      _offset: from,
-      _completed_ids: completed,
+      _limit: 10000, // 충분히 큰 값 (실제 전체 단어 개수보다 크게)
+      _offset: 0,
+      _completed_ids: [], // 빈 배열로 전달하여 완료 단어 제외 안 함
       _div: selectedDiv || null,
       _category: selectedCategory || null,
     });
     if (error) throw error;
 
-    const rows = data || [];
-    const hasMoreNext = rows.length > PAGE_SIZE;
-    const items = hasMoreNext ? rows.slice(0, PAGE_SIZE) : rows;
-
-    return { items, hasMore: hasMoreNext };
+    setAllRandomWords(data || []);
   };
 
-  const loadMore = async () => {
+  /**
+   * 완료되지 않은 단어만 필터링
+   */
+  const getFilteredWords = () => {
+    const completedIds = getCompletedIds();
+    const completedSet = new Set(completedIds);
+    return allRandomWords.filter((word) => !completedSet.has(word.id));
+  };
+
+  /**
+   * 페이지 인덱스에 해당하는 단어들을 표시
+   */
+  const loadPage = (pageIndex) => {
+    const filteredWords = getFilteredWords();
+    const from = pageIndex * PAGE_SIZE;
+    const to = from + PAGE_SIZE;
+    const pageWords = filteredWords.slice(from, to);
+
+    setWords(pageIndex === 0 ? pageWords : (prev) => [...prev, ...pageWords]);
+    setHasMore(to < filteredWords.length);
+    setPage(pageIndex + 1);
+  };
+
+  const loadMore = () => {
     if (!hasMore || loadingMore) return;
     setLoadingMore(true);
     try {
-      const next = await fetchPage(page);
-      setWords((prev) => [...prev, ...next.items]);
-      setHasMore(next.hasMore);
-      setPage((p) => p + 1);
+      loadPage(page);
     } catch (e) {
       notifyError(`추가 로딩 실패: ${e.message}`);
     } finally {
