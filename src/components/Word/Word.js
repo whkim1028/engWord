@@ -56,7 +56,10 @@ function Word() {
 
   const fetchDivs = async () => {
     try {
-      const { data, error } = await supabase.from("Word").select("div");
+      const { data, error } = await supabase
+        .from("Word")
+        .select("div")
+        .eq("useYn", true);
       if (error) throw error;
       const distinctDivs = [
         ...new Set(data.map((item) => item.div).filter(Boolean)),
@@ -69,7 +72,10 @@ function Word() {
 
   const fetchCategories = async () => {
     try {
-      const { data, error } = await supabase.from("Word").select("category");
+      const { data, error } = await supabase
+        .from("Word")
+        .select("category")
+        .eq("useYn", true);
       if (error) throw error;
       const distinctCategories = [
         ...new Set(data.map((item) => item.category).filter(Boolean)),
@@ -295,9 +301,11 @@ function Word() {
             <h1 className="display-6 fw-bold m-0">영단어장</h1>
 
             <div className="d-flex align-items-center gap-2">
-              {/* 완료 배지 */}
+              {/* 전체/완료/남은 단어 수 배지 */}
               <span className="badge bg-light text-dark">
-                완료된 단어: <strong>{completedCount.toLocaleString()}</strong>
+                전체 <strong>{allRandomWords.length.toLocaleString()}</strong>개
+                {" / "}완료 <strong>{completedCount.toLocaleString()}</strong>개
+                {" / "}남은 <strong>{(allRandomWords.length - completedCount).toLocaleString()}</strong>개
               </span>
 
               {/* 리셋 버튼 */}
