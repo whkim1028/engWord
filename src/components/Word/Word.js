@@ -234,6 +234,7 @@ function Word() {
 
         // 2) 정규화 + 파일 내부 중복 제거(engWord 기준, 대소문자 무시)
         const seen = new Set();
+        const dupWords = [];
         const prepared = rawRows
           .map((r) => ({
             engWord: (r.engWord ?? "").toString().trim(),
@@ -245,8 +246,11 @@ function Word() {
           }))
           .filter((r) => r.engWord.length > 0)
           .filter((r) => {
-            const key = r.engWord.toLowerCase();
-            if (seen.has(key)) return false;
+            const key = `${r.engWord.toLowerCase()}|${r.div ?? ""}|${r.category ?? ""}`;
+            if (seen.has(key)) {
+              dupWords.push(r.engWord);
+              return false;
+            }
             seen.add(key);
             return true;
           });
@@ -278,6 +282,12 @@ function Word() {
         notifySuccess(
           `총 ${prepared.length.toLocaleString()}개의 단어가 재생성되었습니다.`
         );
+
+        if (dupWords.length > 0) {
+          const preview = dupWords.slice(0, 5).join(", ");
+          const extra = dupWords.length > 5 ? ` 외 ${dupWords.length - 5}개` : "";
+          notifyInfo(`중복 단어 ${dupWords.length}개가 제외되었습니다: ${preview}${extra}`);
+        }
 
         // 6) 필터 리프레시 + 목록 재조회
         await fetchDivs();
