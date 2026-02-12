@@ -54,12 +54,11 @@ function Word() {
     safeGetCompleted().length
   );
 
-  const fetchDivs = async () => {
+  const fetchDivs = async (category = "") => {
     try {
-      const { data, error } = await supabase
-        .from("Word")
-        .select("div")
-        .eq("useYn", true);
+      let query = supabase.from("Word").select("div").eq("useYn", true);
+      if (category) query = query.eq("category", category);
+      const { data, error } = await query;
       if (error) throw error;
       const distinctDivs = [
         ...new Set(data.map((item) => item.div).filter(Boolean)),
@@ -90,6 +89,12 @@ function Word() {
     fetchDivs();
     fetchCategories();
   }, []);
+
+  useEffect(() => {
+    setSelectedDiv("");
+    fetchDivs(selectedCategory);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory]);
 
   useEffect(() => {
     resetAndLoad();
