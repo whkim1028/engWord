@@ -4,7 +4,7 @@ import { useLocation } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { supabase } from "../../supabaseClient";
 import FlipCard from "./FlipCard";
-import { notifySuccess, notifyError } from "../../utils/notification";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notification";
 
 const COMPLETED_WORDS_STORAGE_KEY = "completedWords";
 const PAGE_SIZE = 20;
