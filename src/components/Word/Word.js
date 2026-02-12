@@ -62,10 +62,12 @@ function Word() {
       if (error) throw error;
       const distinctDivs = [
         ...new Set(data.map((item) => item.div).filter(Boolean)),
-      ];
-      setDivs(distinctDivs.sort());
+      ].sort();
+      setDivs(distinctDivs);
+      return distinctDivs;
     } catch (e) {
       notifyError(`Div 목록 로딩 실패: ${e.message}`);
+      return [];
     }
   };
 
@@ -91,8 +93,9 @@ function Word() {
   }, []);
 
   useEffect(() => {
-    setSelectedDiv("");
-    fetchDivs(selectedCategory);
+    fetchDivs(selectedCategory).then((divs) => {
+      setSelectedDiv(divs.length === 1 ? divs[0] : "");
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory]);
 
